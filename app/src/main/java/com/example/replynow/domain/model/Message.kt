@@ -10,7 +10,8 @@ data class Message(
     val isReplied: Boolean = false,
     val isPending: Boolean = false,
     val snoozedUntil: Long? = null,
-    val isImportant: Boolean = false
+    val isImportant: Boolean = false,
+    val messageCount: Int = 1
 ) {
     companion object {
         private val IMPORTANT_KEYWORDS = listOf("urgent", "asap", "important", "emergency", "help", "critical")

@@ -3,6 +3,7 @@ package com.example.replynow.ui.screen
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -15,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,12 +33,22 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val screenWidthDp = configuration.screenWidthDp
+
+    val horizontalPadding = when {
+        screenWidthDp >= 840 -> 48.dp
+        screenWidthDp >= 600 -> 32.dp
+        else -> 16.dp
+    }
+    val maxContentWidth = if (screenWidthDp >= 840) 640.dp else Int.MAX_VALUE.dp
+    val titleSize = if (screenWidthDp >= 600) 28.sp else 24.sp
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text("Settings", fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                    Text("Settings", fontWeight = FontWeight.Bold, fontSize = titleSize)
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
             )
@@ -46,7 +58,8 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = horizontalPadding)
+                .widthIn(max = maxContentWidth)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -102,7 +115,7 @@ fun SettingsScreen(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                         modifier = Modifier
                             .menuAnchor()
-                            .width(150.dp),
+                            .widthIn(min = 130.dp, max = 200.dp),
                         shape = RoundedCornerShape(12.dp),
                         textStyle = MaterialTheme.typography.bodyMedium
                     )

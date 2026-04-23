@@ -1,8 +1,15 @@
 package com.example.replynow.ui.screen
 
+import android.content.ComponentName
+import android.content.Intent
+import android.content.res.Configuration
+import android.provider.Settings
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,6 +21,9 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,50 +35,63 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.replynow.R
-
-data class AppItem(
-    val name: String,
-    val packageName: String,
-    val iconRes: Int,
-    val pendingCount: Int = 0,
-    val accentColor: Color
-)
-
-private val supportedApps = listOf(
-    AppItem("WhatsApp", "com.whatsapp", R.drawable.whatsapp, 3, Color(0xFF25D366)),
-    AppItem("Messenger", "com.facebook.orca", R.drawable.messenger, 1, Color(0xFF0084FF)),
-    AppItem("Instagram", "com.instagram.android", R.drawable.instagram, 2, Color(0xFFE1306C)),
-    AppItem("Telegram", "org.telegram.messenger", R.drawable.telegram, 0, Color(0xFF0088CC)),
-    AppItem("Snapchat", "com.snapchat.android", R.drawable.snapchat, 0, Color(0xFFFFFC00)),
-    AppItem("Discord", "com.discord", R.drawable.discord, 1, Color(0xFF5865F2)),
-    AppItem("Slack", "com.Slack", R.drawable.slack, 0, Color(0xFF4A154B)),
-    AppItem("Teams", "com.microsoft.teams", R.drawable.teams, 0, Color(0xFF6264A7)),
-    AppItem("Signal", "org.thoughtcrime.securesms", R.drawable.signal, 0, Color(0xFF3A76F0)),
-    AppItem("Gmail", "com.google.android.gm", R.drawable.gmail, 4, Color(0xFFEA4335)),
-    AppItem("Outlook", "com.microsoft.office.outlook", R.drawable.outlook, 0, Color(0xFF0078D4)),
-    AppItem("LinkedIn", "com.linkedin.android", R.drawable.linkedin, 0, Color(0xFF0A66C2)),
-    AppItem("Facebook", "com.facebook.katana", R.drawable.facebook, 0, Color(0xFF1877F2)),
-    AppItem("X", "com.twitter.android", R.drawable.x, 0, Color(0xFF000000)),
-    AppItem("TikTok", "com.zhiliaoapp.musically", R.drawable.tiktok, 0, Color(0xFF010101)),
-    AppItem("Viber", "com.viber.voip", R.drawable.viber, 0, Color(0xFF7360F2)),
-    AppItem("WeChat", "com.tencent.mm", R.drawable.wechat, 0, Color(0xFF07C160)),
-    AppItem("Messages", "com.google.android.apps.messaging", R.drawable.messages, 1, Color(0xFF1A73E8)),
-    AppItem("Google Chat", "com.google.android.apps.dynamite", R.drawable.gchat, 0, Color(0xFF00AC47)),
-    AppItem("Zoom", "us.zoom.videomeetings", R.drawable.zoom, 0, Color(0xFF2D8CFF)),
-    AppItem("WA Business", "com.whatsapp.w4b", R.drawable.whatsappbusiness, 0, Color(0xFF25D366)),
-)
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.replynow.service.ReplyNotificationListenerService
+import com.example.replynow.ui.viewmodel.HomeViewModel
+import com.example.replynow.ui.viewmodel.InstalledApp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
-    val totalPending = supportedApps.sumOf { it.pendingCount }
+fun HomeScreen(
+    viewModel: HomeViewModel = hiltViewModel(),
+    onAppClick: (String, String, Int, Long) -> Unit = { _, _, _, _ -> }
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val screenWidthDp = configuration.screenWidthDp
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    // Responsive: adaptive horizontal padding + grid min cell size
+    val horizontalPadding = when {
+        screenWidthDp >= 840 -> 32.dp  // tablet
+        screenWidthDp >= 600 -> 24.dp  // large phone / small tablet
+        else -> 16.dp                  // phone
+    }
+    val gridMinCellSize = when {
+        screenWidthDp >= 840 -> 130.dp
+        screenWidthDp >= 600 -> 115.dp
+        screenWidthDp >= 380 -> 100.dp
+        else -> 88.dp                  // very small phone
+    }
+    val titleSize = if (screenWidthDp >= 600) 30.sp else 26.sp
+    val subtitleSize = if (screenWidthDp >= 600) 15.sp else 13.sp
+
+    // Check notification access — re-check when resuming
+    var hasNotificationAccess by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasNotificationAccess = isNotificationAccessGranted(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Scaffold(
         topBar = {
@@ -78,14 +101,18 @@ fun HomeScreen() {
                         Text(
                             "ReplyNow",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 26.sp,
+                            fontSize = titleSize,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        Text(
-                            "$totalPending pending replies across apps",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
+                        if (hasNotificationAccess) {
+                            Text(
+                                if (uiState.totalPending > 0)
+                                    "${uiState.totalPending} pending replies across apps"
+                                else "All caught up! No pending replies",
+                                fontSize = subtitleSize,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -95,59 +122,92 @@ fun HomeScreen() {
         }
     ) { padding ->
         LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
+            columns = GridCells.Adaptive(minSize = gridMinCellSize),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Section header — "Your Apps"
-            item(span = { GridItemSpan(3) }) {
-                Text(
-                    "Connected Apps",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
-                )
+            // Notification access banner
+            if (!hasNotificationAccess) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    NotificationAccessBanner(
+                        onGrantClick = {
+                            context.startActivity(
+                                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                            )
+                        }
+                    )
+                }
             }
 
-            itemsIndexed(supportedApps) { index, app ->
-                var pressed by remember { mutableStateOf(false) }
-                val scale by animateFloatAsState(
-                    targetValue = if (pressed) 0.92f else 1f,
-                    animationSpec = tween(150, easing = FastOutSlowInEasing),
-                    label = "scale"
-                )
+            // Section header
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Your Apps",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        "${uiState.installedApps.size} installed",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    )
+                }
+            }
 
-                // Staggered entry animation
-                val entryAlpha by animateFloatAsState(
-                    targetValue = 1f,
-                    animationSpec = tween(
-                        durationMillis = 400,
-                        delayMillis = index * 50,
-                        easing = FastOutSlowInEasing
-                    ),
-                    label = "entryAlpha"
-                )
-
-                AppGridItem(
-                    app = app,
-                    modifier = Modifier
-                        .scale(scale)
-                        .graphicsLayer { this.alpha = entryAlpha }
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { pressed = !pressed }
+            if (uiState.isLoading) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+            } else if (uiState.installedApps.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 60.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("📱", fontSize = 48.sp)
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "No supported apps installed",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
-                )
+                    }
+                }
+            } else {
+                itemsIndexed(uiState.installedApps) { index, app ->
+                    val entryAlpha by animateFloatAsState(
+                        targetValue = 1f,
+                        animationSpec = tween(400, delayMillis = index * 50, easing = FastOutSlowInEasing),
+                        label = "entryAlpha"
+                    )
+
+                    AppGridItem(
+                        app = app,
+                        modifier = Modifier
+                            .graphicsLayer { alpha = entryAlpha }
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { onAppClick(app.packageName, app.name, app.iconRes, app.accentColor) }
+                            )
+                    )
+                }
             }
 
             // Bottom spacer
-            item(span = { GridItemSpan(3) }) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 Spacer(Modifier.height(16.dp))
             }
         }
@@ -155,10 +215,90 @@ fun HomeScreen() {
 }
 
 @Composable
+private fun NotificationAccessBanner(onGrantClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.NotificationsActive,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Enable Notification Access",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "ReplyNow needs permission to read notifications from your messaging apps",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                    lineHeight = 16.sp
+                )
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = onGrantClick,
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
+                ) {
+                    Icon(Icons.Default.Shield, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Grant Access", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AppGridItem(
-    app: AppItem,
+    app: InstalledApp,
     modifier: Modifier = Modifier
 ) {
+    val color = Color(app.accentColor)
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+
+    // Responsive icon + badge sizing
+    val iconSize: Dp = when {
+        screenWidthDp >= 840 -> 68.dp
+        screenWidthDp >= 600 -> 62.dp
+        screenWidthDp >= 380 -> 56.dp
+        else -> 48.dp
+    }
+    val innerIconSize = iconSize * 0.71f
+    val badgeSize: Dp = when {
+        screenWidthDp >= 600 -> 24.dp
+        else -> 22.dp
+    }
+    val nameFontSize = when {
+        screenWidthDp >= 600 -> 14.sp
+        else -> 12.sp
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -166,8 +306,8 @@ private fun AppGridItem(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        app.accentColor.copy(alpha = 0.06f),
-                        app.accentColor.copy(alpha = 0.02f)
+                        color.copy(alpha = if (isDark) 0.12f else 0.06f),
+                        color.copy(alpha = if (isDark) 0.05f else 0.02f)
                     )
                 )
             )
@@ -175,39 +315,38 @@ private fun AppGridItem(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(contentAlignment = Alignment.TopEnd) {
-            // Icon with subtle shadow
             Box(
                 modifier = Modifier
-                    .size(56.dp)
-                    .shadow(6.dp, CircleShape, ambientColor = app.accentColor.copy(alpha = 0.3f))
+                    .size(iconSize)
+                    .shadow(6.dp, CircleShape, ambientColor = color.copy(alpha = 0.3f))
                     .clip(CircleShape)
-                    .background(Color.White),
+                    .background(if (isDark) Color(0xFF2A2A2A) else Color.White),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
                     painter = painterResource(id = app.iconRes),
                     contentDescription = app.name,
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(innerIconSize)
                         .clip(CircleShape),
                     contentScale = ContentScale.Fit
                 )
             }
 
-            // Badge
+            // Dynamic badge
             if (app.pendingCount > 0) {
                 Box(
                     modifier = Modifier
                         .offset(x = 4.dp, y = (-2).dp)
-                        .size(22.dp)
+                        .size(badgeSize)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.error),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "${app.pendingCount}",
+                        text = if (app.pendingCount > 99) "99+" else "${app.pendingCount}",
                         color = Color.White,
-                        fontSize = 11.sp,
+                        fontSize = if (app.pendingCount > 99) 8.sp else 11.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -224,9 +363,14 @@ private fun AppGridItem(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-            fontSize = 12.sp
+            fontSize = nameFontSize
         )
     }
 }
 
+private fun isNotificationAccessGranted(context: android.content.Context): Boolean {
+    val cn = ComponentName(context, ReplyNotificationListenerService::class.java)
+    val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+    return flat != null && flat.contains(cn.flattenToString())
+}
 

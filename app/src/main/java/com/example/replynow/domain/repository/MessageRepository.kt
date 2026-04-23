@@ -7,6 +7,8 @@ interface MessageRepository {
     fun getPendingMessages(): Flow<List<Message>>
     fun getAllMessages(): Flow<List<Message>>
     fun getMessagesByApp(appName: String): Flow<List<Message>>
+    fun getMessagesByPackage(packageName: String): Flow<List<Message>>
+    fun getPendingCountsByPackage(): Flow<Map<String, Int>>
     suspend fun addMessage(message: Message): Long
     suspend fun markAsReplied(id: Long)
     suspend fun snooze(id: Long, snoozedUntil: Long)

@@ -58,11 +58,12 @@ fun ReplyNowMainScreen() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val isSplash = currentDestination?.route == Screen.Splash.route
+    val isAppMessages = currentDestination?.route == Screen.AppMessages.route
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            if (!isSplash) {
+            if (!isSplash && !isAppMessages) {
                 NavigationBar(
                     tonalElevation = NavigationBarDefaults.Elevation
                 ) {
@@ -88,7 +89,7 @@ fun ReplyNowMainScreen() {
     ) { innerPadding ->
         ReplyNowNavHost(
             navController = navController,
-            modifier = if (isSplash) Modifier else Modifier.padding(innerPadding)
+            modifier = if (isSplash || isAppMessages) Modifier else Modifier.padding(innerPadding)
         )
     }
 }

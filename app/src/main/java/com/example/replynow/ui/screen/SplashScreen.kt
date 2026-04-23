@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.example.replynow.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.min
 
 @Composable
 fun SplashScreen(onFinished: () -> Unit) {
@@ -40,6 +42,17 @@ fun SplashScreen(onFinished: () -> Unit) {
     val textAlpha = remember { Animatable(0f) }
     val taglineAlpha = remember { Animatable(0f) }
     val glowAlpha = remember { Animatable(0f) }
+
+    val configuration = LocalConfiguration.current
+    val screenMin = min(configuration.screenWidthDp, configuration.screenHeightDp)
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+
+    // Proportional sizing based on smallest screen dimension
+    val iconSize = (screenMin * 0.28f).coerceIn(80f, 160f).dp
+    val glowSize = iconSize * 1.35f
+    val titleSize = (screenMin * 0.075f).coerceIn(24f, 40f).sp
+    val taglineSize = (screenMin * 0.037f).coerceIn(12f, 18f).sp
+    val spacerHeight = (screenMin * 0.06f).coerceIn(16f, 36f).dp
 
     LaunchedEffect(Unit) {
         // Icon enters with a bounce-scale + fade
@@ -74,7 +87,7 @@ fun SplashScreen(onFinished: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White),
+            .background(if (isDark) Color(0xFF121212) else Color.White),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -85,7 +98,7 @@ fun SplashScreen(onFinished: () -> Unit) {
             Box(contentAlignment = Alignment.Center) {
                 Box(
                     modifier = Modifier
-                        .size(160.dp)
+                        .size(glowSize)
                         .alpha(glowAlpha.value)
                         .clip(CircleShape)
                         .background(
@@ -101,17 +114,17 @@ fun SplashScreen(onFinished: () -> Unit) {
                     painter = painterResource(id = R.drawable.replynow_icon),
                     contentDescription = "ReplyNow",
                     modifier = Modifier
-                        .size(120.dp)
+                        .size(iconSize)
                         .scale(iconScale.value)
                         .alpha(iconAlpha.value)
                 )
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(spacerHeight))
 
             Text(
                 text = "ReplyNow",
-                fontSize = 32.sp,
+                fontSize = titleSize,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFF97F21),
                 modifier = Modifier.alpha(textAlpha.value),
@@ -122,9 +135,10 @@ fun SplashScreen(onFinished: () -> Unit) {
 
             Text(
                 text = "Never forget to reply",
-                fontSize = 15.sp,
+                fontSize = taglineSize,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF8C6239).copy(alpha = 0.7f),
+                color = if (isDark) Color(0xFFD4A574).copy(alpha = 0.7f)
+                    else Color(0xFF8C6239).copy(alpha = 0.7f),
                 modifier = Modifier.alpha(taglineAlpha.value),
                 letterSpacing = 0.5.sp
             )

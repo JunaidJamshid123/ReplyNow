@@ -23,6 +23,12 @@ class MessageRepositoryImpl @Inject constructor(
     override fun getMessagesByApp(appName: String): Flow<List<Message>> =
         dao.getMessagesByApp(appName).map { list -> list.map { it.toDomain() } }
 
+    override fun getMessagesByPackage(packageName: String): Flow<List<Message>> =
+        dao.getMessagesByPackage(packageName).map { list -> list.map { it.toDomain() } }
+
+    override fun getPendingCountsByPackage(): Flow<Map<String, Int>> =
+        dao.getPendingCountsByPackage().map { list -> list.associate { it.packageName to it.count } }
+
     override suspend fun addMessage(message: Message): Long =
         dao.insert(message.toEntity())
 
@@ -51,7 +57,8 @@ class MessageRepositoryImpl @Inject constructor(
         isReplied = isReplied,
         isPending = isPending,
         snoozedUntil = snoozedUntil,
-        isImportant = isImportant
+        isImportant = isImportant,
+        messageCount = messageCount
     )
 
     private fun Message.toEntity() = MessageEntity(
@@ -64,6 +71,7 @@ class MessageRepositoryImpl @Inject constructor(
         isReplied = isReplied,
         isPending = isPending,
         snoozedUntil = snoozedUntil,
-        isImportant = isImportant
+        isImportant = isImportant,
+        messageCount = messageCount
     )
 }

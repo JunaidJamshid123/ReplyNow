@@ -14,5 +14,6 @@ data class MessageEntity(
     val isReplied: Boolean = false,
     val isPending: Boolean = false,
     val snoozedUntil: Long? = null,
-    val isImportant: Boolean = false
+    val isImportant: Boolean = false,
+    val messageCount: Int = 1
 )

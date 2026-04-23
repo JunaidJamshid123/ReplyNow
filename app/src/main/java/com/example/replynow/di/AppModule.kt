@@ -25,7 +25,8 @@ object AppModule {
             context,
             ReplyNowDatabase::class.java,
             "replynow_db"
-        ).build()
+        ).addMigrations(ReplyNowDatabase.MIGRATION_1_2)
+        .build()
 
     @Provides
     @Singleton
