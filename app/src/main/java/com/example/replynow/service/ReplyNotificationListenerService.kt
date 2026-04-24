@@ -1,9 +1,15 @@
 package com.example.replynow.service
 
 import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.util.Log
+import com.example.replynow.MainActivity
+import com.example.replynow.R
 import com.example.replynow.data.local.dao.MessageDao
 import com.example.replynow.domain.model.Message
 import com.example.replynow.domain.repository.MessageRepository
@@ -25,7 +31,7 @@ class ReplyNotificationListenerService : NotificationListenerService() {
     @Inject
     lateinit var dao: MessageDao
 
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var scope: CoroutineScope? = null
 
     // Messaging app package names to monitor
     private val messagingApps = setOf(
@@ -53,8 +59,59 @@ class ReplyNotificationListenerService : NotificationListenerService() {
     )
 
     companion object {
+        private const val TAG = "ReplyNowListener"
+        private const val FOREGROUND_CHANNEL_ID = "listener_service"
+        private const val FOREGROUND_NOTIFICATION_ID = 9999
+
         // Cache PendingIntents so the UI can open exact chats
         val pendingIntents = ConcurrentHashMap<String, PendingIntent>()
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        startForegroundService()
+        Log.d(TAG, "Service created")
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        Log.d(TAG, "Listener connected — actively monitoring notifications")
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        Log.w(TAG, "Listener disconnected — requesting rebind")
+        requestRebind(android.content.ComponentName(this, ReplyNotificationListenerService::class.java))
+    }
+
+    private fun startForegroundService() {
+        val channel = NotificationChannel(
+            FOREGROUND_CHANNEL_ID,
+            "Notification Monitor",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "Keeps ReplyNow monitoring your messages"
+            setShowBadge(false)
+        }
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(channel)
+
+        val intent = Intent(this, MainActivity::class.java)
+        val pi = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = Notification.Builder(this, FOREGROUND_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("ReplyNow is active")
+            .setContentText("Monitoring messages in the background")
+            .setContentIntent(pi)
+            .setOngoing(true)
+            .build()
+
+        startForeground(FOREGROUND_NOTIFICATION_ID, notification)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -76,20 +133,20 @@ class ReplyNotificationListenerService : NotificationListenerService() {
         val appName = getAppLabel(pkg)
         val isImportant = Message.detectImportance(text)
 
-        scope.launch {
-            // Check if this sender already has a pending message from this app
+        scope?.launch {
+            // Check if this exact message already exists (same sender, same text)
             val hasPending = dao.isDuplicate(sender, pkg, text)
             if (hasPending) {
-                // Same sender, same text — skip completely
                 return@launch
             }
 
-            // Try to update existing sender entry (new message from same person)
-            dao.updateExistingSender(sender, pkg, text, sbn.postTime)
-
-            // If no existing entry was updated, insert new
-            val existingCheck = dao.isDuplicate(sender, pkg, text)
-            if (!existingCheck) {
+            // Check if sender has an existing unreplied entry
+            val hasExisting = dao.hasUnrepliedFromSender(sender, pkg)
+            if (hasExisting) {
+                // Update existing entry with the new message text
+                dao.updateExistingSender(sender, pkg, text, sbn.postTime)
+            } else {
+                // No existing entry — insert new
                 repository.addMessage(
                     Message(
                         senderName = sender,
@@ -123,6 +180,8 @@ class ReplyNotificationListenerService : NotificationListenerService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        scope.cancel()
+        scope?.cancel()
+        scope = null
+        Log.d(TAG, "Service destroyed")
     }
 }

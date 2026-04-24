@@ -4,12 +4,15 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.net.Uri
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
@@ -18,10 +21,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.replynow.service.ReplyNotificationListenerService
 import com.example.replynow.ui.viewmodel.SettingsViewModel
@@ -35,6 +41,21 @@ fun SettingsScreen(
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
+
+    // Re-check statuses on resume
+    var isBatteryOptimized by remember { mutableStateOf(true) }
+    var hasNotificationAccess by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isBatteryOptimized = !isIgnoringBatteryOptimizations(context)
+                hasNotificationAccess = isNotificationListenerEnabled(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val horizontalPadding = when {
         screenWidthDp >= 840 -> 48.dp
@@ -66,14 +87,34 @@ fun SettingsScreen(
             // Notification Access
             SettingsCard(
                 title = "Notification Access",
-                subtitle = "Required to detect incoming messages",
+                subtitle = if (hasNotificationAccess) "Access granted — monitoring active" else "Required to detect incoming messages",
                 icon = { Icon(Icons.Default.NotificationsActive, contentDescription = null) }
             ) {
-                Button(
-                    onClick = { openNotificationListenerSettings(context) },
-                    shape = RoundedCornerShape(12.dp)
+                if (hasNotificationAccess) {
+                    Text("Granted", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                } else {
+                    Button(
+                        onClick = { openNotificationListenerSettings(context) },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Grant Access")
+                    }
+                }
+            }
+
+            // Battery Optimization
+            if (isBatteryOptimized) {
+                SettingsCard(
+                    title = "Battery Optimization",
+                    subtitle = "Disable to prevent Android from killing the service",
+                    icon = { Icon(Icons.Default.BatteryAlert, contentDescription = null) }
                 ) {
-                    Text("Grant Access")
+                    Button(
+                        onClick = { requestBatteryOptimizationExemption(context) },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Disable")
+                    }
                 }
             }
 
@@ -193,6 +234,18 @@ private fun SettingsCard(
 private fun openNotificationListenerSettings(context: Context) {
     val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
     context.startActivity(intent)
+}
+
+private fun requestBatteryOptimizationExemption(context: Context) {
+    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+        data = Uri.parse("package:${context.packageName}")
+    }
+    context.startActivity(intent)
+}
+
+private fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+    val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    return pm.isIgnoringBatteryOptimizations(context.packageName)
 }
 
 fun isNotificationListenerEnabled(context: Context): Boolean {

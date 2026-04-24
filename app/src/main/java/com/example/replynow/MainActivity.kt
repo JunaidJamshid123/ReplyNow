@@ -14,39 +14,21 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import com.example.replynow.ui.navigation.ReplyNowNavHost
 import com.example.replynow.ui.navigation.Screen
 import com.example.replynow.ui.theme.ReplyNowTheme
-import com.example.replynow.worker.ReminderWorker
 import dagger.hilt.android.AndroidEntryPoint
-import java.util.concurrent.TimeUnit
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        scheduleReminderWork()
         setContent {
             ReplyNowTheme {
                 ReplyNowMainScreen()
             }
         }
-    }
-
-    private fun scheduleReminderWork() {
-        val request = PeriodicWorkRequestBuilder<ReminderWorker>(
-            15, TimeUnit.MINUTES
-        ).build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            ReminderWorker.WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
-            request
-        )
     }
 }
 

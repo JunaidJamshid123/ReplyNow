@@ -30,6 +30,9 @@ interface MessageDao {
     @Query("SELECT EXISTS(SELECT 1 FROM messages WHERE senderName = :sender AND packageName = :pkg AND isReplied = 0 AND messagePreview = :preview)")
     suspend fun isDuplicate(sender: String, pkg: String, preview: String): Boolean
 
+    @Query("SELECT EXISTS(SELECT 1 FROM messages WHERE senderName = :sender AND packageName = :pkg AND isReplied = 0)")
+    suspend fun hasUnrepliedFromSender(sender: String, pkg: String): Boolean
+
     @Query("UPDATE messages SET messagePreview = :preview, timestamp = :timestamp, messageCount = messageCount + 1 WHERE senderName = :sender AND packageName = :pkg AND isReplied = 0 AND id = (SELECT id FROM messages WHERE senderName = :sender AND packageName = :pkg AND isReplied = 0 ORDER BY timestamp DESC LIMIT 1)")
     suspend fun updateExistingSender(sender: String, pkg: String, preview: String, timestamp: Long)
 
